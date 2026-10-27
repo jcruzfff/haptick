@@ -4,10 +4,12 @@ import {
   INERT_HOST,
   createSwitch,
   ensurePositioned,
+  injectSheet,
   isRtl,
   on,
   park,
   removeSwitch,
+  viewOf,
   watchTouch,
 } from './switch';
 import { TapGuard } from './tap-guard';
@@ -22,6 +24,9 @@ export interface TapOptions {
 
 const noop = () => undefined;
 
+// Attaching twice would stack two switches; the second call is a no-op.
+const attached = new WeakSet<HTMLElement>();
+
 /** Tap haptics for a button, tab, chip or card. Returns a function that
  *  removes them.
  *
@@ -29,17 +34,25 @@ const noop = () => undefined;
  *  bubble to the host, but only for real taps, so a scroller of these still
  *  scrolls without activating anything. Android: vibrates on the host's
  *  click. Disabled, aria-disabled and aria-busy hosts are skipped. */
-export function attachTap(host: HTMLElement, { haptic = 'light', debug = false }: TapOptions = {}) {
+export function attachTap(
+  host: HTMLElement,
+  { haptic = 'light', debug = false }: TapOptions = {},
+): () => void {
   const engine = hapticEngine();
+  if (engine === 'none' || attached.has(host)) return noop;
+  attached.add(host);
   if (engine === 'vibrate') {
-    return on(host, 'click', () => {
+    const off = on(host, 'click', () => {
       if (!host.matches(INERT_HOST)) vibrate(haptic);
     });
+    return () => {
+      off();
+      attached.delete(host);
+    };
   }
-  if (engine !== 'switch') return noop;
 
   ensurePositioned(host);
-  const input = createSwitch({ debug });
+  const input = createSwitch(host, { debug });
   const guard = new TapGuard();
   let unwatch: (() => void) | null = null;
 
@@ -56,7 +69,7 @@ export function attachTap(host: HTMLElement, { haptic = 'light', debug = false }
     on<PointerEvent>(input, 'pointerdown', (e) => {
       finish();
       guard.down(e.clientX, e.clientY);
-      unwatch = watchTouch(guard, e.pointerId, hold, finish);
+      unwatch = watchTouch(viewOf(input), guard, e.pointerId, hold, finish);
     }),
     // WebKit clicks the switch when the touch ends or a scroll cancels it.
     // Only a real tap reaches the host; preventDefault also undoes the toggle.
@@ -68,10 +81,12 @@ export function attachTap(host: HTMLElement, { haptic = 'light', debug = false }
     }),
   ];
   host.appendChild(input);
+  injectSheet(input);
 
   return () => {
     finish();
     unbinds.forEach((unbind) => unbind());
     removeSwitch(input);
+    attached.delete(host);
   };
 }

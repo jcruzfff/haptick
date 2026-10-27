@@ -3,13 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Everything is served from this page's own origin: no trackers, no third-party requests. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>haptick · Haptics for the mobile web</title>
-<meta name="description" content="Real haptic feedback for taps and drags in iPhone Safari and on Android. About 3 KB, zero dependencies.">
+<meta name="description" content="Real haptic feedback for taps and drags on the mobile web.">
 <meta name="theme-color" content="#060607">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face { font-family: "Geist"; src: url("fonts/Geist-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "Geist Mono"; src: url("fonts/GeistMono-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
   :root {
     color-scheme: dark;
     --bg: #060607;
@@ -23,9 +26,7 @@
     --text-2: #9a9aa3;
     --text-3: #5c5c64;
     --green: #8dffaa;
-    --green-deep: #34d873;
     --green-glow: rgba(90, 255, 140, 0.5);
-    --green-soft: rgba(90, 255, 140, 0.1);
     --red: #ff8a8a;
     --radius: 28px;
     --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -38,11 +39,10 @@
     margin: 0; min-height: 100vh; color: var(--text); font: 15px/1.5 var(--sans);
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow-x: hidden;
     background:
-      radial-gradient(900px 520px at 50% -180px, rgba(120, 255, 165, 0.09), transparent 70%),
+      radial-gradient(900px 520px at 50% -180px, rgba(120, 255, 165, 0.08), transparent 70%),
       radial-gradient(700px 500px at 100% 30%, rgba(255, 255, 255, 0.025), transparent 70%),
       var(--bg);
   }
-  /* Film grain over everything, very faint. */
   body::after {
     content: ""; position: fixed; inset: 0; z-index: 100; pointer-events: none; opacity: 0.05; mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -50,152 +50,90 @@
   ::selection { background: var(--green); color: #04110a; }
   a { color: inherit; text-decoration: none; }
   button { font: inherit; color: inherit; }
-  code, kbd, pre { font-family: var(--mono); }
 
-  /* ---------- Dot field: every haptic ripples through it ---------- */
   #field { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none;
     -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 30%, transparent 85%);
             mask-image: radial-gradient(120% 90% at 50% 0%, #000 30%, transparent 85%); }
 
-  /* ---------- Nav ---------- */
   nav { position: sticky; top: 0; z-index: 20; padding-top: env(safe-area-inset-top);
     background: linear-gradient(180deg, rgba(6, 6, 7, 0.85), rgba(6, 6, 7, 0.6));
     -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%);
     border-bottom: 1px solid var(--line); }
-  .nav-inner { max-width: 1120px; margin: 0 auto; height: 56px; padding: 0 20px; display: flex; align-items: center; gap: 14px; }
+  .nav-inner { max-width: 1120px; margin: 0 auto; height: 56px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.02em; font-size: 16px; }
   .brand svg { display: block; }
-  .version { font: 500 11px var(--mono); color: var(--text-3); padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; }
-  .nav-links { margin-left: auto; display: flex; align-items: center; gap: 4px; }
-  .nav-links a { font-size: 13px; color: var(--text-2); padding: 7px 10px; border-radius: 10px; transition: color 160ms, background 160ms; }
-  .nav-links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .nav-link { font-size: 13px; color: var(--text-2); padding: 7px 10px; border-radius: 10px; transition: color 160ms, background 160ms; }
+  .nav-link:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
 
   main, footer { position: relative; z-index: 1; }
   main { max-width: 1120px; margin: 0 auto; padding: 0 20px 80px; }
 
-  /* ---------- Hero ---------- */
-  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px; align-items: end; padding: 88px 0 56px; }
-  .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px;
-    font: 500 12px var(--sans); color: #06210f; background: linear-gradient(180deg, #c9ffd6, #8dffaa);
-    box-shadow: 0 0 0 1px rgba(141, 255, 170, 0.4), 0 8px 30px -8px var(--green-glow); }
-  .eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #0b4a22; }
-  h1 { margin: 22px 0 0; font-weight: 600; font-size: clamp(42px, 7vw, 76px); line-height: 0.98; letter-spacing: -0.05em; }
-  h1 .lead, h1 .soft { text-wrap: balance; }
-  h1 .lead { display: block; background: linear-gradient(180deg, #fff 30%, #b9b9c0); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  h1 .soft { display: block; color: var(--text-3); }
-  .hero p.sub { margin: 22px 0 0; max-width: 520px; font-size: 17px; line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
-  .hero p.sub strong { color: var(--text); font-weight: 500; }
+  .hero { padding: 96px 0 64px; max-width: 760px; }
+  h1 { margin: 0; font-weight: 600; font-size: clamp(42px, 7vw, 76px); line-height: 0.98; letter-spacing: -0.05em; }
+  h1 span { display: block; text-wrap: balance; }
+  h1 .lead { background: linear-gradient(180deg, #fff 30%, #b9b9c0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { margin: 22px 0 0; max-width: 520px; font-size: 17px; line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
+  .sub strong { color: var(--text); font-weight: 500; }
   .cta { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 10px; }
   .install { position: relative; display: inline-flex; align-items: center; gap: 14px; height: 46px; padding: 0 8px 0 18px; border-radius: 14px;
-    background: linear-gradient(180deg, #19191c, #101012); border: 1px solid var(--line-strong);
-    box-shadow: inset 0 1px 0 var(--sheen), 0 12px 30px -16px #000; font: 500 14px var(--mono); cursor: pointer; white-space: nowrap; }
+    background: linear-gradient(180deg, #19191c, #101012); border: 1px solid var(--line-strong); white-space: nowrap;
+    box-shadow: inset 0 1px 0 var(--sheen), 0 12px 30px -16px #000; font: 500 14px var(--mono); cursor: pointer; }
   .install .prompt { color: var(--text-3); }
   .install .copy { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: var(--text-2);
     background: rgba(255, 255, 255, 0.05); transition: color 160ms, background 160ms; }
   .install:hover .copy { color: var(--text); background: rgba(255, 255, 255, 0.09); }
   .install.copied .copy { color: var(--green); }
-  .ghost { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 18px; border-radius: 14px;
-    color: var(--text-2); border: 1px solid transparent; transition: color 160ms, border-color 160ms; font-weight: 500; }
+  .ghost { display: inline-flex; align-items: center; height: 46px; padding: 0 18px; border-radius: 14px; font-weight: 500;
+    color: var(--text-2); border: 1px solid transparent; transition: color 160ms, border-color 160ms; }
   .ghost:hover { color: var(--text); border-color: var(--line); }
 
-  /* Device card */
-  .device { padding: 18px; border-radius: 22px; }
-  .device-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .device-row + .device-row { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .device .k { font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
-  .device .v { font-size: 14px; color: var(--text); }
-  .engine-pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--mono); padding: 4px 10px; border-radius: 999px;
-    border: 1px solid var(--line-strong); color: var(--text-2); }
-  .engine-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
-  .engine-pill.live { color: var(--green); border-color: rgba(141, 255, 170, 0.3); background: var(--green-soft); }
-  .engine-pill.live::before { background: var(--green); box-shadow: 0 0 8px var(--green-glow); animation: breathe 2.4s ease-in-out infinite; }
-  @keyframes breathe { 50% { opacity: 0.45; } }
-  .device-note { margin: 12px 0 0; font-size: 13px; color: var(--text-2); line-height: 1.5; }
-  .toggle { position: relative; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--line-strong); cursor: pointer;
-    background: #1c1c20; transition: background 200ms var(--ease), border-color 200ms; padding: 0; }
-  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
-    background: linear-gradient(180deg, #fff, #d4d4d8); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); transition: transform 220ms var(--ease); }
-  .toggle[aria-pressed="true"] { background: var(--green-deep); border-color: transparent; }
-  .toggle[aria-pressed="true"]::after { transform: translateX(18px); }
-
-  /* ---------- Bento ---------- */
   .bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
-  .tile, .device {
-    position: relative; isolation: isolate; border: 1px solid var(--line);
-    background:
-      radial-gradient(130% 90% at 0% 0%, var(--sheen), transparent 48%),
-      linear-gradient(180deg, var(--tile-top), var(--tile-bottom));
+  .tile { position: relative; isolation: isolate; border: 1px solid var(--line); border-radius: var(--radius); padding: 22px;
+    display: flex; flex-direction: column; gap: 16px; min-width: 0;
+    background: radial-gradient(130% 90% at 0% 0%, var(--sheen), transparent 48%), linear-gradient(180deg, var(--tile-top), var(--tile-bottom));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 40px 80px -40px rgba(0, 0, 0, 0.9);
-  }
-  .tile { border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
     opacity: 0; transform: translateY(14px); animation: rise 700ms var(--ease) forwards; animation-delay: calc(var(--i, 0) * 70ms + 120ms); }
   .tile.glow::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
-    background: radial-gradient(70% 60% at 100% 100%, rgba(80, 255, 140, 0.11), transparent 70%); }
-  .tile.glow-left::before { background: radial-gradient(70% 60% at 0% 100%, rgba(80, 255, 140, 0.1), transparent 70%); }
+    background: radial-gradient(70% 60% at 100% 100%, rgba(80, 255, 140, 0.1), transparent 70%); }
   @keyframes rise { to { opacity: 1; transform: none; } }
   .span-7 { grid-column: span 7; } .span-5 { grid-column: span 5; } .span-12 { grid-column: span 12; }
   .tall { grid-row: span 2; }
 
-  .tile-head { display: flex; align-items: center; gap: 10px; }
-  .tile-index { font: 500 11px var(--mono); color: var(--text-3); letter-spacing: 0.04em; }
+  .tile-head { display: flex; align-items: baseline; gap: 10px; }
   .tile h2 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
-  .tile-copy { margin: -4px 0 0; color: var(--text-2); font-size: 14px; line-height: 1.5; text-wrap: pretty; max-width: 46ch; }
-  .tile-copy strong { color: var(--text); font-weight: 500; }
-  .leds { margin-left: auto; display: flex; gap: 5px; }
+  .tile-head .hint { color: var(--text-3); font-size: 13px; }
+  .leds { margin-left: auto; display: flex; gap: 5px; align-self: center; }
   .leds i { width: 6px; height: 6px; border-radius: 50%; background: #26262b; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6); transition: background 420ms, box-shadow 420ms; }
   .leds i.on { background: var(--green); box-shadow: 0 0 10px var(--green-glow), 0 0 2px var(--green); transition: none; }
-  .label { font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
-  .fill { flex: 1; }
 
-  /* Buttons */
-  .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 16px; border-radius: 13px;
+  .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 13px;
     border: 1px solid var(--line-strong); cursor: pointer; font-size: 14px; font-weight: 500; -webkit-tap-highlight-color: transparent;
     background: linear-gradient(180deg, #232327, #18181b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 16px -10px #000;
-    transition: transform 140ms var(--ease), border-color 160ms, background 160ms; user-select: none; -webkit-user-select: none; }
+    transition: transform 140ms var(--ease), border-color 160ms; user-select: none; -webkit-user-select: none; }
   .btn:hover { border-color: rgba(255, 255, 255, 0.2); }
   .btn:active { transform: scale(0.96); }
-  .btn:disabled, .btn[aria-busy="true"] { opacity: 0.4; cursor: default; }
-  .btn:disabled:active { transform: none; }
-  .btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+  .btn .dot { width: 6px; height: 6px; border-radius: 50%; }
   .btn[data-haptic="success"] .dot { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
   .btn[data-haptic="error"] .dot { background: var(--red); box-shadow: 0 0 8px rgba(255, 120, 120, 0.6); }
-  .btn.primary { color: #04160a; border-color: transparent; background: linear-gradient(180deg, #c9ffd6, #7bf59b);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 10px 28px -10px var(--green-glow); }
   .btn-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; }
-  .readout { font: 13px var(--mono); color: var(--text-3); min-height: 1.5em; }
-  .readout b { color: var(--green); font-weight: 500; }
 
-  /* Stats */
-  .big { font: 600 64px/0.9 var(--sans); letter-spacing: -0.05em; }
   .glow-text { color: var(--green); text-shadow: 0 0 18px var(--green-glow), 0 0 42px rgba(90, 255, 140, 0.25); }
-  .two-tone { font-size: 22px; line-height: 1.25; letter-spacing: -0.025em; font-weight: 500; color: var(--text-3); margin: 0; }
-  .two-tone span { color: var(--text); }
-  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .fact { padding: 12px; border-radius: 16px; background: var(--well); border: 1px solid var(--line); }
-  .fact b { display: block; font: 600 15px var(--sans); letter-spacing: -0.01em; }
-  .fact span { font: 11px var(--mono); color: var(--text-3); }
 
-  /* Wells: the recessed drag surfaces */
   .well { position: relative; border-radius: 20px; background: var(--well); border: 1px solid var(--line);
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.4); overflow: hidden;
     touch-action: none; user-select: none; -webkit-user-select: none; }
 
-  /* Drag pad */
-  #pad { flex: 1; min-height: 260px; display: grid; place-items: center;
+  #pad { flex: 1; min-height: 280px; display: grid; place-items: center;
     background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.2px); background-size: 16px 16px; background-position: center; }
-  #pad-glow { position: absolute; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; pointer-events: none; opacity: 0;
+  #pad-glow { position: absolute; top: 0; left: 0; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; pointer-events: none; opacity: 0;
     background: radial-gradient(circle, rgba(90, 255, 140, 0.22), transparent 65%); transition: opacity 300ms; }
   #pad.active #pad-glow { opacity: 1; }
   #pad-count { position: relative; font: 600 88px/1 var(--mono); letter-spacing: -0.06em; pointer-events: none; font-variant-numeric: tabular-nums; }
-  #pad-hint { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font: 11px var(--mono); color: var(--text-3); pointer-events: none; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { position: relative; height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03);
     color: var(--text-2); font: 500 12px var(--mono); cursor: pointer; transition: color 160ms, background 160ms, border-color 160ms; -webkit-tap-highlight-color: transparent; }
   .chip.on { color: #04160a; background: var(--green); border-color: transparent; box-shadow: 0 0 18px -4px var(--green-glow); }
-  .settings { display: grid; grid-template-columns: auto 1fr; gap: 10px 12px; align-items: center; }
 
-  /* Slider */
   #slider { height: 104px; }
   #ruler { position: absolute; left: 26px; right: 26px; bottom: 18px; height: 40px; pointer-events: none; }
   #ruler i { position: absolute; bottom: 0; width: 2px; margin-left: -1px; height: 12px; border-radius: 1px; background: #34343a; transition: background 120ms, box-shadow 120ms; }
@@ -205,29 +143,25 @@
   #thumb { position: absolute; top: 16px; left: 50%; width: 30px; height: 30px; margin-left: -15px; border-radius: 50%; pointer-events: none;
     background: radial-gradient(circle at 35% 30%, #fff, #cfcfd4 60%, #a1a1a8); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.3); }
   #slider-value { position: absolute; top: 14px; right: 20px; font: 600 26px/1 var(--mono); letter-spacing: -0.04em; pointer-events: none; font-variant-numeric: tabular-nums; }
-  #slider-value.zero { color: var(--text-3); text-shadow: none; }
+  #slider-value.zero { color: var(--text-3); }
 
-  /* Carousel */
   #carousel { height: 176px; }
   #track { position: absolute; top: 20px; left: 20px; display: flex; gap: 12px; will-change: transform; pointer-events: none; }
   .card { flex: none; width: 136px; height: 136px; border-radius: 26px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;
     background: radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.09), transparent 50%), linear-gradient(160deg, #26262b, #121214);
     border: 1px solid var(--line-strong); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 14px 30px -12px #000;
     transition: border-color 200ms, box-shadow 200ms; }
-  .card .n { font: 500 11px var(--mono); color: var(--text-3); }
-  .card .name { font-size: 15px; font-weight: 500; letter-spacing: -0.02em; color: var(--text-2); line-height: 1.15; }
+  .card .name { font-size: 15px; font-weight: 500; letter-spacing: -0.02em; color: var(--text-2); }
   .card .val { font: 600 28px/1 var(--mono); letter-spacing: -0.05em; color: var(--text-2); }
   .card.active { border-color: rgba(141, 255, 170, 0.35); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 30px -8px var(--green-glow); }
   .card.active .val { color: var(--green); text-shadow: 0 0 14px var(--green-glow); }
 
-  /* Scrolling chips */
   .strip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -22px; padding: 2px 22px;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 22px, #000 calc(100% - 22px), transparent);
             mask-image: linear-gradient(90deg, transparent, #000 22px, #000 calc(100% - 22px), transparent); }
   .strip::-webkit-scrollbar { display: none; }
-  .strip .chip { flex: none; height: 38px; padding: 0 16px; font: 500 13px var(--sans); }
+  .strip .chip { flex: none; height: 40px; padding: 0 16px; font: 500 13px var(--sans); }
 
-  /* Swipe to confirm */
   #confirm { height: 76px; border-radius: 999px; }
   #confirm-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 76px; border-radius: inherit; pointer-events: none;
     background: linear-gradient(90deg, rgba(52, 216, 115, 0.15), rgba(90, 255, 140, 0.55)); box-shadow: 0 0 30px -4px var(--green-glow); }
@@ -239,50 +173,32 @@
   #confirm-knob { position: absolute; top: 8px; left: 8px; width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; pointer-events: none;
     color: #111; background: radial-gradient(circle at 35% 30%, #fff, #d9d9de 60%, #a7a7ae); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.3); }
 
-  /* Code */
-  .tabs { position: relative; display: inline-flex; padding: 3px; border-radius: 12px; background: var(--well); border: 1px solid var(--line); align-self: flex-start; }
-  .tab { position: relative; z-index: 1; height: 30px; padding: 0 14px; border: 0; background: none; color: var(--text-3); font: 500 12px var(--mono); cursor: pointer; border-radius: 9px; transition: color 160ms; }
-  .tab[aria-selected="true"] { color: var(--text); }
-  .tab-ind { position: absolute; top: 3px; bottom: 3px; left: 3px; border-radius: 9px; background: linear-gradient(180deg, #26262b, #1b1b1f);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px var(--line); transition: transform 280ms var(--ease), width 280ms var(--ease); }
-  pre { margin: 0; padding: 18px; border-radius: 18px; background: var(--well); border: 1px solid var(--line); overflow-x: auto;
-    font-size: 12.5px; line-height: 1.7; color: #c8c8ce; tab-size: 2; }
-  pre[hidden] { display: none; }
-  .t-k { color: #ff9ad5; } .t-s { color: var(--green); } .t-f { color: #9ecbff; } .t-c { color: var(--text-3); } .t-n { color: #ffc56d; }
-
-  /* QR */
-  .qr-wrap { display: flex; gap: 20px; align-items: center; }
-  #qr { flex: none; width: 152px; height: 152px; padding: 12px; border-radius: 20px; background: var(--well); border: 1px solid var(--line); }
+  .qr-wrap { display: flex; align-items: center; justify-content: center; flex: 1; }
+  #qr { width: 168px; height: 168px; padding: 12px; border-radius: 22px; background: var(--well); border: 1px solid var(--line); }
   #qr svg { display: block; width: 100%; height: 100%; }
-  .touch-only { display: none; }
-  @media (hover: none) and (pointer: coarse) {
-    .desktop-only { display: none !important; }
-    .touch-only { display: revert; }
-  }
+  @media (hover: none) and (pointer: coarse) { .desktop-only { display: none !important; } }
 
-  /* Sheet */
   #sheet { position: fixed; inset: 0; z-index: 50; display: grid; align-items: end; justify-items: center; }
   #sheet[hidden] { display: none; }
   #sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: fade 200ms; }
   #sheet-panel { position: relative; width: min(420px, calc(100% - 24px)); margin-bottom: max(16px, env(safe-area-inset-bottom)); padding: 18px; border-radius: 28px;
-    display: flex; flex-direction: column; gap: 8px; animation: up 320ms var(--ease); }
+    display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); animation: up 320ms var(--ease);
+    background: radial-gradient(130% 90% at 0% 0%, var(--sheen), transparent 48%), linear-gradient(180deg, #17171a, #0c0c0e); }
   #sheet-panel .btn { justify-content: flex-start; width: 100%; height: 50px; border-radius: 16px; }
   #sheet-panel .btn.danger { color: var(--red); }
   #sheet-title { font-weight: 600; letter-spacing: -0.02em; font-size: 17px; padding: 2px 4px 8px; }
   @keyframes fade { from { opacity: 0; } }
   @keyframes up { from { transform: translateY(30px); opacity: 0; } }
 
-  footer { max-width: 1120px; margin: 0 auto; padding: 28px 20px calc(40px + env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap; gap: 10px 20px;
+  footer { max-width: 1120px; margin: 0 auto; padding: 28px 20px calc(40px + env(safe-area-inset-bottom)); display: flex; gap: 20px;
     justify-content: space-between; border-top: 1px solid var(--line); color: var(--text-3); font: 12px var(--mono); }
   footer a:hover { color: var(--text); }
 
-  /* ---------- Responsive ---------- */
   @media (max-width: 920px) {
-    .hero { grid-template-columns: minmax(0, 1fr); padding: 56px 0 36px; gap: 28px; }
+    .hero { padding: 56px 0 40px; }
     .bento { grid-template-columns: minmax(0, 1fr); gap: 12px; }
     .span-7, .span-5, .span-12 { grid-column: auto; }
     .tall { grid-row: auto; }
-    .m-first { order: -1; }
   }
   @media (max-width: 520px) {
     main { padding: 0 16px 64px; }
@@ -291,14 +207,11 @@
     .tile { padding: 18px; border-radius: 24px; }
     .strip { margin: 0 -18px; padding: 2px 18px; }
     .btn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .big { font-size: 52px; }
     .cta { flex-direction: column; align-items: stretch; }
     .install { justify-content: space-between; }
     .ghost { justify-content: center; }
-    .settings { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-    #pad { min-height: 230px; }
+    #pad { min-height: 240px; }
     #pad-count { font-size: 72px; }
-    .nav-links a.hide-sm { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
     .tile { animation: none; opacity: 1; transform: none; }
@@ -311,50 +224,35 @@
 
 <nav>
   <div class="nav-inner">
-    <a class="brand" href="#">
+    <a class="brand" href="./">
       <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
         <g fill="#5c5c64"><circle cx="3" cy="3" r="2"/><circle cx="11" cy="3" r="2"/><circle cx="19" cy="3" r="2"/><circle cx="3" cy="11" r="2"/><circle cx="3" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><circle cx="11" cy="19" r="2"/></g>
         <circle cx="11" cy="11" r="2.6" fill="#8dffaa"/><circle cx="19" cy="11" r="2" fill="#8dffaa" opacity="0.55"/>
       </svg>
       haptick
     </a>
-    <span class="version">v0.1.0</span>
-    <div class="nav-links">
-      <a href="#docs" class="hide-sm">Docs</a>
-      <a href="https://www.npmjs.com/package/haptick" class="hide-sm">npm</a>
-      <a href="https://github.com/jcruzfff/haptick">GitHub ↗</a>
-    </div>
+    <a class="nav-link" href="https://github.com/jcruzfff/haptick" rel="noopener">GitHub ↗</a>
   </div>
 </nav>
 
 <main>
   <section class="hero">
-    <div>
-      <span class="eyebrow">Works in iPhone Safari</span>
-      <h1><span class="lead">Haptics for the web.</span><span class="soft">Even on iPhone.</span></h1>
-      <p class="sub">Real Taptic Engine ticks for <strong>taps and drags</strong> in iOS Safari, where there's no Vibration API, plus tuned vibration on Android. About 3&nbsp;KB, with no dependencies.</p>
-      <div class="cta">
-        <button class="install" id="install" type="button" aria-label="Copy install command">
-          <span><span class="prompt">$ </span>npm i haptick</span>
-          <span class="copy" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
-          </span>
-        </button>
-        <a class="ghost" href="https://github.com/jcruzfff/haptick">Read the docs →</a>
-      </div>
+    <h1><span class="lead">Haptics for the web.</span></h1>
+    <p class="sub">Real Taptic Engine ticks for <strong>taps and drags</strong> in iOS Safari, where there's no Vibration API, plus tuned vibration on Android.</p>
+    <div class="cta">
+      <button class="install" id="install" type="button" aria-label="Copy install command">
+        <span><span class="prompt">$ </span>npm i haptick</span>
+        <span class="copy" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+        </span>
+      </button>
+      <a class="ghost" href="https://github.com/jcruzfff/haptick#readme" rel="noopener">Docs →</a>
     </div>
-    <aside class="device" aria-label="Your device">
-      <div class="device-row"><span class="k">Your device</span><span class="v" id="platform">…</span></div>
-      <div class="device-row"><span class="k">Engine</span><span class="engine-pill" id="engine">…</span></div>
-      <div class="device-row"><span class="k">Haptics</span><button class="toggle" id="mute" type="button" aria-pressed="true" aria-label="Haptics on"></button></div>
-      <p class="device-note" id="engine-note"></p>
-    </aside>
   </section>
 
-  <section class="bento" id="docs">
+  <section class="bento">
     <article class="tile span-7" style="--i:0">
-      <div class="tile-head"><span class="tile-index">01</span><h2>Buttons</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
-      <p class="tile-copy">On Android each preset is its own vibration. iPhone gives every tap one crisp tick, felt on release.</p>
+      <div class="tile-head"><h2>Buttons</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
       <div class="btn-grid" id="presets">
         <button class="btn" data-haptic="selection">selection</button>
         <button class="btn" data-haptic="light">light</button>
@@ -363,28 +261,21 @@
         <button class="btn" data-haptic="success"><span class="dot"></span>success</button>
         <button class="btn" data-haptic="error"><span class="dot"></span>error</button>
       </div>
-      <div class="row">
-        <button class="btn" disabled>Disabled, no tick</button>
-        <button class="btn primary" id="order">Place order</button>
-      </div>
-      <div class="readout" id="taps">Tap something.</div>
     </article>
 
-    <article class="tile span-5 glow" style="--i:1">
-      <div class="tile-head"><span class="tile-index">02</span><h2>Tiny by design</h2></div>
-      <div><span class="big glow-text">3 KB</span></div>
-      <p class="two-tone">Gzipped, with <span>zero dependencies.</span> Works with any framework, and with <span>React</span> out of the box.</p>
-      <div class="fill"></div>
-      <div class="facts">
-        <div class="fact"><b>iOS 17.4+</b><span>Safari</span></div>
-        <div class="fact"><b>Android</b><span>Chrome</span></div>
-        <div class="fact"><b>SSR</b><span>safe</span></div>
+    <article class="tile span-5 tall glow" style="--i:1">
+      <div class="tile-head"><h2>Drag</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
+      <div class="chips" id="pad-haptic">
+        <button class="chip on" data-value="tick">tick</button><button class="chip" data-value="heavy">heavy</button><button class="chip" data-value="error">error</button><button class="chip" data-value="burst">burst</button>
+      </div>
+      <div id="pad" class="well">
+        <div id="pad-glow"></div>
+        <span id="pad-count">0</span>
       </div>
     </article>
 
     <article class="tile span-7" style="--i:2">
-      <div class="tile-head"><span class="tile-index">03</span><h2>Slider</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
-      <p class="tile-copy">A tick on <strong>every mark</strong>, a double at the centre and a triple when you hit either end.</p>
+      <div class="tile-head"><h2>Slider</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
       <div id="slider" class="well">
         <div id="ruler"></div>
         <div id="thumb"></div>
@@ -392,96 +283,40 @@
       </div>
     </article>
 
-    <article class="tile span-5 tall glow-left" style="--i:3">
-      <div class="tile-head"><span class="tile-index">04</span><h2>Drag ticks</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
-      <p class="tile-copy">Drag anywhere in the pad. It ticks every few pixels, like a dial. On iPhone, rest your finger for a beat before you move.</p>
-      <div class="settings">
-        <span class="label">Every</span>
-        <div class="chips" data-group="spacing">
-          <button class="chip" data-value="32">32px</button><button class="chip" data-value="16">16px</button><button class="chip on" data-value="10">10px</button><button class="chip" data-value="6">6px</button>
-        </div>
-        <span class="label">Play</span>
-        <div class="chips" data-group="haptic">
-          <button class="chip on" data-value="tick">tick</button><button class="chip" data-value="heavy">heavy</button><button class="chip" data-value="error">error</button><button class="chip" data-value="burst">burst</button>
-        </div>
-      </div>
-      <div id="pad" class="well">
-        <div id="pad-glow"></div>
-        <span id="pad-count">0</span>
-        <span id="pad-hint">ticks</span>
-      </div>
-    </article>
-
-    <article class="tile span-7" style="--i:4">
-      <div class="tile-head"><span class="tile-index">05</span><h2>Carousel</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
-      <p class="tile-copy">Each card ticks as it snaps past. Pull past the end and you feel a bump. Tap a card to open it.</p>
+    <article class="tile span-7" style="--i:3">
+      <div class="tile-head"><h2>Carousel</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
       <div id="carousel" class="well"><div id="track"></div></div>
     </article>
 
-    <article class="tile span-7 glow" style="--i:5">
-      <div class="tile-head"><span class="tile-index">06</span><h2>Swipe to confirm</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
-      <p class="tile-copy">Dense ticks while it fills and a <strong>burst</strong> when it lands. Safari's back-swipe stays out of the way.</p>
+    <article class="tile span-5 desktop-only" style="--i:4">
+      <div class="tile-head"><h2>Feel it</h2><span class="hint">Scan with your phone</span></div>
+      <div class="qr-wrap"><div id="qr" role="img" aria-label="QR code for this page"></div></div>
+    </article>
+
+    <article class="tile span-5" style="--i:5">
+      <div class="tile-head"><h2>Scroll</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
+      <div class="strip" id="chips"></div>
+    </article>
+
+    <article class="tile span-7 glow" style="--i:6">
+      <div class="tile-head"><h2>Confirm</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
       <div id="confirm" class="well">
         <div id="confirm-fill"></div>
         <span id="confirm-label">Slide to confirm</span>
         <div id="confirm-knob"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h10M10 5l4 4-4 4"/></svg></div>
       </div>
     </article>
-
-    <article class="tile span-5" style="--i:6">
-      <div class="tile-head"><span class="tile-index">07</span><h2>Scrolling chips</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
-      <p class="tile-copy">Tap to select. Swipe across them and the row just scrolls, with no accidental taps and no stray ticks.</p>
-      <div class="fill"></div>
-      <div class="strip" id="chips"></div>
-      <div class="readout" id="chips-out">Selected <b>All</b></div>
-    </article>
-
-    <article class="tile span-7" style="--i:7">
-      <div class="tile-head"><span class="tile-index">08</span><h2>A few lines to add it</h2><span class="leds"><i></i><i></i><i></i><i></i></span></div>
-      <div class="tabs" role="tablist">
-        <span class="tab-ind" id="tab-ind"></span>
-        <button class="tab" role="tab" aria-selected="true" data-tab="vanilla">vanilla</button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="react">react</button>
-      </div>
-<pre data-panel="vanilla"><span class="t-k">import</span> { attachTap, attachDrag } <span class="t-k">from</span> <span class="t-s">'haptick'</span>;
-
-<span class="t-c">// Any button, tab or card</span>
-<span class="t-f">attachTap</span>(button, { haptic: <span class="t-s">'medium'</span> });
-
-<span class="t-c">// Any slider, carousel or swipe</span>
-<span class="t-k">const</span> haptics = <span class="t-f">attachDrag</span>(slider);
-slider.<span class="t-f">addEventListener</span>(<span class="t-s">'pointermove'</span>, () =&gt; {
-  <span class="t-k">if</span> (crossedAStep) haptics.<span class="t-f">tick</span>();
-});</pre>
-<pre data-panel="react" hidden><span class="t-k">import</span> { HapticTap, useHapticDrag } <span class="t-k">from</span> <span class="t-s">'haptick/react'</span>;
-
-<span class="t-k">&lt;button</span> onClick={buy}<span class="t-k">&gt;</span>
-  Buy <span class="t-k">&lt;</span><span class="t-f">HapticTap</span> haptic=<span class="t-s">"medium"</span> <span class="t-k">/&gt;</span>
-<span class="t-k">&lt;/button&gt;</span>
-
-<span class="t-k">const</span> haptics = <span class="t-f">useHapticDrag</span>(sliderRef);
-<span class="t-k">&lt;div</span> ref={sliderRef} onPointerMove={() =&gt; haptics.<span class="t-f">tick</span>()} <span class="t-k">/&gt;</span></pre>
-    </article>
-
-    <article class="tile span-5 glow desktop-only" style="--i:8">
-      <div class="tile-head"><span class="tile-index">09</span><h2>Feel it</h2></div>
-      <div class="qr-wrap">
-        <div id="qr" aria-label="QR code for this page"></div>
-        <p class="two-tone">Haptics live in your hand. <span>Scan with your phone</span> and touch everything.</p>
-      </div>
-      <div class="readout" id="qr-url"></div>
-    </article>
   </section>
 </main>
 
 <footer>
-  <span>MIT licensed · zero dependencies</span>
-  <a href="https://github.com/jcruzfff/haptick">github.com/jcruzfff/haptick</a>
+  <span>MIT</span>
+  <a href="https://github.com/jcruzfff/haptick" rel="noopener">github.com/jcruzfff/haptick</a>
 </footer>
 
 <div id="sheet" hidden>
   <div id="sheet-backdrop"></div>
-  <div id="sheet-panel" class="device">
+  <div id="sheet-panel">
     <div id="sheet-title">Card</div>
     <button class="btn" data-choice="Save">Save</button>
     <button class="btn" data-choice="Share">Share</button>

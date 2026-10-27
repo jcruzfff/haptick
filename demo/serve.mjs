@@ -8,7 +8,14 @@ import { buildDemo } from './build.mjs';
 const port = Number(process.env.PORT ?? 8787);
 const dist = new URL('dist/', import.meta.url);
 const isLan = (ip) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+// The only files served: nothing else on disk is reachable.
+const files = new Map([
+  ['index.html', 'text/html; charset=utf-8'],
+  ['main.js', 'text/javascript; charset=utf-8'],
+  ['fonts/Geist-Variable.woff2', 'font/woff2'],
+  ['fonts/GeistMono-Variable.woff2', 'font/woff2'],
+  ['fonts/OFL.txt', 'text/plain; charset=utf-8'],
+]);
 
 const lanAddress = () =>
   Object.values(networkInterfaces())
@@ -28,17 +35,19 @@ createServer(async (req, res) => {
     return;
   }
   const file = path === '/' ? 'index.html' : path.slice(1);
-  if (!(file in { 'index.html': 1, 'main.js': 1 })) {
+  const type = files.get(file);
+  if (!type) {
     res.writeHead(404).end('Not found');
     return;
   }
   try {
     if (file === 'index.html') await buildDemo();
     const body = await readFile(new URL(file, dist));
-    res.writeHead(200, { 'content-type': types[file.slice(file.lastIndexOf('.'))], 'cache-control': 'no-store' });
+    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
     res.end(body);
   } catch (error) {
-    res.writeHead(500).end(String(error));
+    console.error(error);
+    res.writeHead(500).end('Build failed; see the terminal.');
   }
 }).listen(port, '0.0.0.0', () => {
   const lan = lanAddress();

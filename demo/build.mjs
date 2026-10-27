@@ -18,6 +18,14 @@ export async function buildDemo() {
     logLevel: 'warning',
   });
   await copyFile(new URL('index.html', dir), new URL('index.html', out));
+  // Fonts are self-hosted so the page makes no third-party requests. Geist is
+  // under the SIL Open Font License, which travels with the files.
+  const fonts = new URL('fonts/', out);
+  const geist = new URL('../node_modules/geist/', dir);
+  await mkdir(fonts, { recursive: true });
+  await copyFile(new URL('dist/fonts/geist-sans/Geist-Variable.woff2', geist), new URL('Geist-Variable.woff2', fonts));
+  await copyFile(new URL('dist/fonts/geist-mono/GeistMono-Variable.woff2', geist), new URL('GeistMono-Variable.woff2', fonts));
+  await copyFile(new URL('LICENSE.TXT', geist), new URL('OFL.txt', fonts));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) await buildDemo();

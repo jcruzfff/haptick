@@ -40,21 +40,24 @@ const SHEET = `${INERT_HOST.split(', ')
   .map((host) => `${host} > ${HAPTIC_SWITCH_SELECTOR}`)
   .join(',')}{pointer-events:none!important}`;
 
-const sheetDocs = new WeakSet<Document>();
+const sheetRoots = new WeakSet<Document | ShadowRoot>();
 
-/** Constructed sheets aren't blocked by a `style-src` CSP; a `<style>` tag is
- *  the fallback for older engines. */
-function injectSheet(doc: Document): void {
-  if (sheetDocs.has(doc)) return;
-  sheetDocs.add(doc);
+/** Adds the stylesheet to the document or shadow root the switch lives in,
+ *  once. Constructed sheets aren't blocked by a `style-src` CSP; a `<style>`
+ *  tag is the fallback for older engines. */
+export function injectSheet(input: HTMLInputElement): void {
+  const root = input.getRootNode();
+  if (!(root instanceof Document || root instanceof ShadowRoot) || sheetRoots.has(root)) return;
+  sheetRoots.add(root);
+  const doc = input.ownerDocument;
   try {
-    const sheet = new CSSStyleSheet();
+    const sheet = new (doc.defaultView ?? window).CSSStyleSheet();
     sheet.replaceSync(SHEET);
-    doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, sheet];
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
   } catch {
     const style = doc.createElement('style');
     style.textContent = SHEET;
-    doc.head.appendChild(style);
+    (root instanceof Document ? root.head : root).appendChild(style);
   }
 }
 
@@ -76,14 +79,12 @@ export interface SwitchOptions {
   debug?: boolean;
 }
 
-export function createSwitch({
-  drag = false,
-  zIndex,
-  catchTouches = false,
-  debug = false,
-}: SwitchOptions = {}): HTMLInputElement {
-  injectSheet(document);
-  const input = document.createElement('input');
+/** A detached switch for `host`; append it, then call `injectSheet`. */
+export function createSwitch(
+  host: HTMLElement,
+  { drag = false, zIndex, catchTouches = false, debug = false }: SwitchOptions = {},
+): HTMLInputElement {
+  const input = host.ownerDocument.createElement('input');
   input.type = 'checkbox';
   input.setAttribute('switch', '');
   input.setAttribute('data-haptick', drag ? 'drag' : 'tap');
@@ -113,7 +114,13 @@ export function removeSwitch(input: HTMLInputElement): void {
 
 /** The switch fills its host, so the host must be a containing block. */
 export function ensurePositioned(host: HTMLElement): void {
-  if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+  const view = host.ownerDocument.defaultView ?? window;
+  if (view.getComputedStyle(host).position === 'static') host.style.position = 'relative';
+}
+
+/** The window a switch's touches arrive in (an iframe has its own). */
+export function viewOf(input: HTMLInputElement): Window & typeof globalThis {
+  return input.ownerDocument.defaultView ?? window;
 }
 
 /** Read direction from markup, not computed style: no style flush on touch-down. */
@@ -144,6 +151,7 @@ export function on<E extends Event>(
  *  ancestor can swallow that click, and a switch left parked would never
  *  tick again. Returns the unbind. */
 export function watchTouch(
+  view: Window,
   guard: TapGuard,
   pointerId: number,
   onSwipe: () => void,
@@ -152,7 +160,7 @@ export function watchTouch(
 ): () => void {
   const unbinds = [
     on<PointerEvent>(
-      window,
+      view,
       'pointermove',
       (e) => {
         if (e.pointerId !== pointerId) return;
@@ -162,7 +170,7 @@ export function watchTouch(
       { capture: true, passive: true },
     ),
     on<PointerEvent>(
-      window,
+      view,
       'pointerup',
       (e) => {
         if (e.pointerId === pointerId) onEnd();
@@ -170,7 +178,7 @@ export function watchTouch(
       { capture: true },
     ),
     on<PointerEvent>(
-      window,
+      view,
       'pointercancel',
       (e) => {
         if (e.pointerId !== pointerId) return;
@@ -187,9 +195,9 @@ export function watchTouch(
 export function forwardTap(input: HTMLInputElement, x: number, y: number): void {
   const before = input.style.pointerEvents;
   input.style.pointerEvents = 'none';
-  const target = document.elementFromPoint(x, y);
+  const target = input.ownerDocument.elementFromPoint(x, y);
   input.style.pointerEvents = before;
   target?.dispatchEvent(
-    new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y }),
+    new (viewOf(input).MouseEvent)('click', { bubbles: true, cancelable: true, clientX: x, clientY: y }),
   );
 }

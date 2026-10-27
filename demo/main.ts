@@ -2,12 +2,9 @@ import qrcode from 'qrcode-generator';
 import {
   attachDrag,
   attachTap,
-  hapticEngine,
   isMuted,
   preventSwipeBack,
   resolveHaptic,
-  setMuted,
-  vibrate,
   type Haptic,
   type HapticPreset,
 } from '../src/index';
@@ -133,32 +130,6 @@ function drag(surface: HTMLElement) {
   };
 }
 
-// ---- Device card
-const engine = hapticEngine();
-const ios = navigator.userAgent.match(/OS (\d+[_\d]*) like Mac/)?.[1]?.replace(/_/g, '.');
-$('platform').textContent = ios ? `iOS ${ios}` : /Android/.test(navigator.userAgent) ? 'Android' : 'Desktop';
-const enginePill = $('engine');
-enginePill.textContent = engine;
-enginePill.classList.toggle('live', engine !== 'none');
-$('engine-note').textContent = {
-  switch: 'Every tap and drag on this page ticks through a hidden native switch under your finger.',
-  vibrate: 'Every haptic on this page is a tuned navigator.vibrate pattern.',
-  none: "This device can't vibrate. The lights show what a phone would feel. Scan the code below to try it.",
-}[engine];
-
-const mute = $<HTMLButtonElement>('mute');
-const renderMute = () => {
-  mute.setAttribute('aria-pressed', String(!isMuted()));
-  mute.setAttribute('aria-label', isMuted() ? 'Haptics off' : 'Haptics on');
-};
-renderMute();
-attachTap(mute, { haptic: 'selection', debug });
-mute.addEventListener('click', () => {
-  setMuted(!isMuted());
-  renderMute();
-  show('selection', mute);
-});
-
 // ---- Install command
 const install = $<HTMLButtonElement>('install');
 tap(install, 'success', () => {
@@ -168,44 +139,20 @@ tap(install, 'success', () => {
 });
 
 // ---- Buttons
-const taps = $('taps');
 document.querySelectorAll<HTMLButtonElement>('#presets [data-haptic]').forEach((button) => {
-  const haptic = button.dataset.haptic as HapticPreset;
-  tap(button, haptic, () => (taps.innerHTML = `played <b>${haptic}</b>`));
+  tap(button, button.dataset.haptic as HapticPreset);
 });
-
-// A result that arrives later, with no touch to tick on: Android can still
-// vibrate, iPhone only felt the tap.
-const order = $<HTMLButtonElement>('order');
-tap(order, 'medium', () => {
-  order.setAttribute('aria-busy', 'true');
-  order.textContent = 'Placing…';
-  taps.textContent = 'waiting on the server…';
-  window.setTimeout(() => {
-    vibrate('success');
-    show('success', order);
-    order.removeAttribute('aria-busy');
-    order.textContent = 'Place order';
-    taps.innerHTML = engine === 'vibrate' ? 'order placed, buzzed <b>success</b>' : 'order placed. <b>success</b> buzzes on Android';
-  }, 900);
-});
-
-// ---- Chip groups (settings for the drag pad)
-function chipGroup(name: string, onPick: (value: string) => void) {
-  const chips = document.querySelectorAll<HTMLButtonElement>(`[data-group="${name}"] .chip`);
-  chips.forEach((chip) =>
-    tap(chip, 'selection', () => {
-      chips.forEach((c) => c.classList.toggle('on', c === chip));
-      onPick(chip.dataset.value!);
-    }),
-  );
-}
 
 // ---- Drag ticks
-let spacing = 10;
+const SPACING_PX = 10;
 let padHaptic: Haptic = 'tick';
-chipGroup('spacing', (value) => (spacing = Number(value)));
-chipGroup('haptic', (value) => (padHaptic = value as HapticPreset));
+const padChips = document.querySelectorAll<HTMLButtonElement>('#pad-haptic .chip');
+padChips.forEach((chip) =>
+  tap(chip, 'selection', () => {
+    padChips.forEach((c) => c.classList.toggle('on', c === chip));
+    padHaptic = chip.dataset.value as HapticPreset;
+  }),
+);
 
 const pad = $('pad');
 const padGlow = $('pad-glow');
@@ -234,7 +181,7 @@ pad.addEventListener('pointermove', (e) => {
   movePadGlow(e);
   padTravel += Math.hypot(e.clientX - padLast.x, e.clientY - padLast.y);
   padLast = { x: e.clientX, y: e.clientY };
-  const steps = Math.floor(padTravel / spacing);
+  const steps = Math.floor(padTravel / SPACING_PX);
   if (steps === padSteps) return;
   padSteps = steps;
   padCount.textContent = String(steps);
@@ -326,7 +273,12 @@ const PITCH = 148;
 const cards = CARDS.map(([name, val], i) => {
   const card = document.createElement('div');
   card.className = i === 0 ? 'card active' : 'card';
-  card.innerHTML = `<span class="n">0${i + 1}</span><span class="val">${val}</span><span class="name">${name}</span>`;
+  for (const [cls, text] of [['val', val], ['name', name]]) {
+    const span = document.createElement('span');
+    span.className = cls;
+    span.textContent = text;
+    card.appendChild(span);
+  }
   track.appendChild(card);
   return card;
 });
@@ -402,7 +354,6 @@ $('sheet-backdrop').addEventListener('click', () => (sheet.hidden = true));
 
 // ---- Scrolling chips
 const chips = $('chips');
-const chipsOut = $('chips-out');
 ['All', 'Music', 'Sports', 'Gaming', 'Food', 'Travel', 'Tech', 'Art', 'Film', 'Books'].forEach((name, i) => {
   const chip = document.createElement('button');
   chip.className = i === 0 ? 'chip on' : 'chip';
@@ -410,7 +361,6 @@ const chipsOut = $('chips-out');
   chips.appendChild(chip);
   tap(chip, 'selection', () => {
     chips.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === chip));
-    chipsOut.innerHTML = `Selected <b>${name}</b>`;
   });
 });
 
@@ -478,19 +428,6 @@ confirm.addEventListener('pointercancel', confirmEnd);
 renderConfirm(0);
 addEventListener('resize', () => renderConfirm(confirmed ? 1 : 0));
 
-// ---- Code tabs
-const tabInd = $('tab-ind');
-const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab'));
-const selectTab = (tab: HTMLButtonElement) => {
-  tabs.forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
-  document.querySelectorAll<HTMLElement>('[data-panel]').forEach((panel) => (panel.hidden = panel.dataset.panel !== tab.dataset.tab));
-  tabInd.style.width = `${tab.offsetWidth}px`;
-  tabInd.style.transform = `translateX(${tab.offsetLeft - 3}px)`;
-};
-tabs.forEach((tab) => tap(tab, 'selection', () => selectTab(tab)));
-document.fonts?.ready.then(() => selectTab(tabs.find((t) => t.getAttribute('aria-selected') === 'true')!));
-selectTab(tabs[0]);
-
 // ---- QR: dot-matrix code for this page (the dev server swaps localhost for
 // the computer's network address, so a phone can actually open it)
 async function renderQr() {
@@ -518,6 +455,5 @@ async function renderQr() {
   $('qr').innerHTML =
     `<svg viewBox="0 0 ${n} ${n}" role="img" aria-label="QR code"><g fill="#d4d4d8">${dots}</g>` +
     `${eye(0, 0)}${eye(n - 7, 0)}${eye(0, n - 7)}</svg>`;
-  $('qr-url').textContent = url.replace(/^https?:\/\//, '');
 }
 if (matchMedia('(hover: hover)').matches) void renderQr();

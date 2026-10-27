@@ -4,10 +4,12 @@ import {
   createSwitch,
   ensurePositioned,
   forwardTap,
+  injectSheet,
   isRtl,
   on,
   park,
   removeSwitch,
+  viewOf,
   watchTouch,
 } from './switch';
 import { TapGuard } from './tap-guard';
@@ -44,6 +46,9 @@ export interface HapticDrag {
   destroy(): void;
 }
 
+// Attaching twice returns the drag already on the surface.
+const attached = new WeakMap<HTMLElement, HapticDrag>();
+
 /** Drag haptics for a slider, carousel, scrubber or swipe surface: call
  *  `tick()` from your own move handler whenever something happens (a step,
  *  a snap point, the end of the track).
@@ -62,6 +67,8 @@ export function attachDrag(
     debug = false,
   }: DragOptions = {},
 ): HapticDrag {
+  const existing = attached.get(surface);
+  if (existing) return existing;
   if (hapticEngine() !== 'switch') {
     return {
       element: null,
@@ -73,7 +80,8 @@ export function attachDrag(
   }
 
   ensurePositioned(surface);
-  const input = createSwitch({ drag: true, zIndex, catchTouches, debug });
+  const input = createSwitch(surface, { drag: true, zIndex, catchTouches, debug });
+  const view = viewOf(input);
   let ticker: SwitchDragTicker | null = null;
   let unbindDrag: (() => void) | null = null;
 
@@ -96,14 +104,14 @@ export function attachDrag(
     const unbinds = [
       // Capture phase, so surfaces that stop propagation still count moves,
       // and before the surface's own handlers so their ticks join this move.
-      on(window, 'pointermove', () => leapfrog(t.move(performance.now())), {
+      on(view, 'pointermove', () => leapfrog(t.move(performance.now())), {
         capture: true,
         passive: true,
       }),
       // End on the lift too, so a surface that misses its own pointerup
       // can't leave the switch parked out of reach.
-      on(window, 'pointerup', end, { capture: true }),
-      on(window, 'pointercancel', end, { capture: true }),
+      on(view, 'pointerup', end, { capture: true }),
+      on(view, 'pointercancel', end, { capture: true }),
     ];
     unbindDrag = () => unbinds.forEach((unbind) => unbind());
   };
@@ -124,7 +132,7 @@ export function attachDrag(
       guard.down(e.clientX, e.clientY);
       last.x = e.clientX;
       last.y = e.clientY;
-      unwatch = watchTouch(guard, e.pointerId, () => undefined, finishTap, (x, y) => {
+      unwatch = watchTouch(view, guard, e.pointerId, () => undefined, finishTap, (x, y) => {
         last.x = x;
         last.y = y;
       });
@@ -139,8 +147,9 @@ export function attachDrag(
     }),
   ];
   surface.appendChild(input);
+  injectSheet(input);
 
-  return {
+  const drag: HapticDrag = {
     element: input,
     begin,
     tick(haptic = 'tick') {
@@ -152,6 +161,9 @@ export function attachDrag(
       finishTap();
       unbinds.forEach((unbind) => unbind());
       removeSwitch(input);
+      attached.delete(surface);
     },
   };
+  attached.set(surface, drag);
+  return drag;
 }

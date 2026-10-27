@@ -198,6 +198,26 @@ Since iOS 26.5, a click from script no longer ticks, which is what most
 3. **Less is more.** Tick on meaningful steps such as detents, snap points
    and thresholds, not on every pixel.
 
+## Good to know
+
+- **Use `event.currentTarget` in click handlers.** On iPhone the tap lands on
+  haptick's hidden switch inside your element, so `event.target` is that
+  switch. `currentTarget`, React's `onClick` and `addEventListener` on the
+  element all work as usual.
+- **It relies on WebKit behaviour, not a public iOS API.** If a future iOS
+  release changes how switches respond to touch, haptick stops ticking on
+  iPhone. Nothing breaks, and your page works exactly as before.
+- **Privacy.** haptick makes no network requests and collects nothing. It
+  stores a single key, `haptick:muted`, in `localStorage`, and only after
+  `setMuted()` is called.
+- **Strict CSP.** It works under a strict Content Security Policy: styles go
+  through constructed stylesheets and the CSSOM, never inline `style`
+  attributes or `eval`.
+- **Shadow DOM and iframes** are supported. Attaching twice to the same
+  element is a no-op.
+- **Accessibility.** The switch is `aria-hidden` and out of the tab order, so
+  screen readers and keyboards only ever see your element.
+
 ## Browser support
 
 | Platform | Taps | Drags |

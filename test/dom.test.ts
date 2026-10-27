@@ -84,6 +84,27 @@ describe('attachTap on iOS', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('ignores a second attach to the same element, and allows one again after detach', () => {
+    const button = document.body.appendChild(document.createElement('button'));
+    const detach = attachTap(button);
+    attachTap(button)();
+    expect(button.querySelectorAll('input')).toHaveLength(1);
+    detach();
+    const again = attachTap(button);
+    expect(button.querySelectorAll('input')).toHaveLength(1);
+    again();
+  });
+
+  it('styles switches inside a shadow root, not just the main document', () => {
+    const host = document.body.appendChild(document.createElement('div'));
+    const root = host.attachShadow({ mode: 'open' });
+    const button = root.appendChild(document.createElement('button'));
+    attachTap(button);
+    expect(button.querySelector('input')).not.toBeNull();
+    const styled = (root.adoptedStyleSheets?.length ?? 0) > 0 || root.querySelector('style') !== null;
+    expect(styled).toBe(true);
+  });
+
   it('takes no touches while muted', () => {
     const button = document.body.appendChild(document.createElement('button'));
     attachTap(button);
@@ -147,6 +168,15 @@ describe('attachDrag on iOS', () => {
     expect(input.style.transform).toBe('translateX(-10000px)');
     window.dispatchEvent(pointer('pointerup', 20, 10));
     expect(input.style.transform).toBe('');
+  });
+
+  it('returns the existing drag when a surface is attached twice', () => {
+    const surface = document.body.appendChild(document.createElement('div'));
+    const drag = attachDrag(surface);
+    expect(attachDrag(surface)).toBe(drag);
+    expect(surface.querySelectorAll('input')).toHaveLength(1);
+    drag.destroy();
+    expect(attachDrag(surface)).not.toBe(drag);
   });
 
   it('ignores ticks with no drag in progress', () => {
