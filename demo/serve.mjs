@@ -10,8 +10,23 @@ const dist = new URL('dist/', import.meta.url);
 const isLan = (ip) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 
+const lanAddress = () =>
+  Object.values(networkInterfaces())
+    .flat()
+    .filter((net) => net?.family === 'IPv4' && !net.internal)
+    .map((net) => net.address)
+    // Prefer a home/office LAN address over VPN ones (Tailscale's 100.x).
+    .sort((a, b) => Number(isLan(b)) - Number(isLan(a)))[0];
+
 createServer(async (req, res) => {
   const path = new URL(req.url ?? '/', 'http://x').pathname;
+  // The demo's QR code points phones here instead of at localhost.
+  if (path === '/lan.json') {
+    const lan = lanAddress();
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ url: lan ? `http://${lan}:${port}/` : null }));
+    return;
+  }
   const file = path === '/' ? 'index.html' : path.slice(1);
   if (!(file in { 'index.html': 1, 'main.js': 1 })) {
     res.writeHead(404).end('Not found');
@@ -26,12 +41,7 @@ createServer(async (req, res) => {
     res.writeHead(500).end(String(error));
   }
 }).listen(port, '0.0.0.0', () => {
-  // Prefer a home/office LAN address over VPN ones (Tailscale's 100.x).
-  const lan = Object.values(networkInterfaces())
-    .flat()
-    .filter((net) => net?.family === 'IPv4' && !net.internal)
-    .map((net) => net.address)
-    .sort((a, b) => Number(isLan(b)) - Number(isLan(a)))[0];
+  const lan = lanAddress();
   console.log(`\n  On this computer: http://localhost:${port}/`);
   if (lan) console.log(`  On your phone:    http://${lan}:${port}/   (same Wi-Fi; add ?debug to see the switches)`);
   console.log('');
