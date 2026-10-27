@@ -25,7 +25,7 @@ export async function buildDemo() {
   await mkdir(fonts, { recursive: true });
   await copyFile(new URL('dist/fonts/geist-sans/Geist-Variable.woff2', geist), new URL('Geist-Variable.woff2', fonts));
   await copyFile(new URL('dist/fonts/geist-mono/GeistMono-Variable.woff2', geist), new URL('GeistMono-Variable.woff2', fonts));
-  await copyFile(new URL('LICENSE.TXT', geist), new URL('OFL.txt', fonts));
+  await copyFile(new URL('LICENSE.txt', geist), new URL('OFL.txt', fonts));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) await buildDemo();
