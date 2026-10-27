@@ -432,7 +432,8 @@ addEventListener('resize', () => renderConfirm(confirmed ? 1 : 0));
 // the computer's network address, so a phone can actually open it)
 async function renderQr() {
   let url = location.href.split('#')[0];
-  try {
+  // Only the local dev server (plain http) knows the network address.
+  if (location.protocol === 'http:') try {
     const lan = await fetch('lan.json', { cache: 'no-store' });
     if (lan.ok) url = (await lan.json()).url ?? url;
   } catch {
