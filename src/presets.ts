@@ -33,9 +33,11 @@ export const MAX_IOS_TICKS = 4;
 export const PRESETS: Readonly<Record<HapticPreset, ResolvedHaptic>> = {
   selection: { vibrate: 6, iosTicks: 1 },
   tick: { vibrate: 8, iosTicks: 1 },
-  light: { vibrate: 10, iosTicks: 1 },
-  medium: { vibrate: 16, iosTicks: 1 },
-  heavy: { vibrate: 28, iosTicks: 2 },
+  // Many Android motors blur pulses under ~15ms together, so the tap weights
+  // are spread far enough apart to feel different on most phones.
+  light: { vibrate: 15, iosTicks: 1 },
+  medium: { vibrate: 35, iosTicks: 1 },
+  heavy: { vibrate: 60, iosTicks: 2 },
   success: { vibrate: [12, 60, 24], iosTicks: 2 },
   warning: { vibrate: [24, 80, 24], iosTicks: 2 },
   error: { vibrate: [30, 50, 30, 50, 30], iosTicks: 3 },

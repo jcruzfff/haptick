@@ -2,6 +2,7 @@ import qrcode from 'qrcode-generator';
 import {
   attachDrag,
   attachTap,
+  hapticEngine,
   isMuted,
   preventSwipeBack,
   resolveHaptic,
@@ -139,6 +140,8 @@ tap(install, 'success', () => {
 });
 
 // ---- Buttons
+// iOS plays one fixed tick for every tap; only Android can vary its weight.
+$('tap-hint').hidden = hapticEngine() !== 'switch';
 document.querySelectorAll<HTMLButtonElement>('#presets [data-haptic]').forEach((button) => {
   tap(button, button.dataset.haptic as HapticPreset);
 });
