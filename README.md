@@ -2,6 +2,8 @@
 
 **Real haptic feedback for the mobile web, including iPhone.**
 
+<a href="https://jcruzfff.github.io/haptick/"><img src=".github/assets/demo.webp" alt="The haptick demo: buttons, a slider, a drag pad, a carousel, a scrolling chip row and a slide-to-confirm control" width="100%"></a>
+
 Safari on iOS has no Vibration API, so most web haptics libraries do nothing on
 an iPhone. haptick gets real Taptic Engine ticks out of iOS Safari for both
 **taps** and **drags** (sliders, carousels, swipe-to-confirm), and uses
